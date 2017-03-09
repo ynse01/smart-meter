@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<head>
+<meta charset="utf-8">
+<style>
+.line {
+  fill: none;
+  stroke: steelblue;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  stroke-width: 1.5px;
+}
+</style>
+<script src="//d3js.org/d3.v4.min.js"></script>
+<script>
+
+/**
+ * Pad a string to specified length with specified character.
+ */
+function padString(str, padChar, length) {
+	str = str.toString();
+	while(str.length < length) {
+		str = padChar + str;
+	}
+	return str;
+}
+
+/**
+ * Draw the graph, including axes and captions.
+ */
+function drawGraph(timestamp) {
+	// Remove the old graph.
+	d3.select("svg").selectAll("*").remove();
+	// And create the new graph.
+	var svg = d3.select("svg"),
+		margin = {top: 20, right: 80, bottom: 30, left: 50},
+		width = svg.attr("width") - margin.left - margin.right,
+		height = svg.attr("height") - margin.top - margin.bottom,
+		g = svg.append("g").attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+	var date = new Date(timestamp);
+	// Update the title of the page.
+	document.title = "Meterstanden " + date.toDateString();
+	document.getElementById("header").innerHTML = document.title;
+	var csvFile = 
+	  "P1_" + 
+	  (1900 + date.getYear()) + "-" + 
+	  padString(date.getMonth() + 1, "0", 2) + "-" + 
+	  padString(date.getDate(), "0", 2) + 
+	  "_30s.csv";
+	// Load the CSV file into the page.
+	d3.text(csvFile, function(error, text) {
+	  if (!text) return;
+	  // Interpret the CVS file.
+	  var parser = d3.dsvFormat(';');
+	  var measure = parser.parse(text);
+	  // Scale the horizontal and vertical axes, to make everything fit precisely.
+	  var x = d3.scaleTime().range([0, width]);
+	  var y = d3.scaleLinear().range([height, 0]);
+	  x.domain(d3.extent(measure, function(row) { return new Date(row.p1_timestamp); }));
+	  y.domain([
+		0,
+		d3.max(measure, function(row) { return row.p1_current_power_in; })
+	  ]);
+	  // The functions that will draw the line.
+	  var line = d3.line()
+		.curve(d3.curveBasis)
+		.x(function(d) {
+		  var time = new Date(d.p1_timestamp);
+		  return x(time); 
+		})
+		.y(function(d) {
+		  return y(d.p1_current_power_in); 
+		});
+
+	  // Draw the horizontal axis.
+	  g.append("g")
+		  .attr("class", "axis axis--x")
+		  .attr("transform", "translate(0," + height + ")")
+		  .call(d3.axisBottom(x));
+	  // Draw the vertical axis, with caption.
+	  g.append("g")
+		  .attr("class", "axis axis--y")
+		  .call(d3.axisLeft(y))
+		.append("text")
+		  .attr("transform", "rotate(-90)")
+		  .attr("y", 6)
+		  .attr("dy", "0.71em")
+		  .attr("fill", "#000")
+		  .text("Power IN, kW");
+	  // Big moment, drawing the line itself !!!
+	  g.append("path")
+		.datum(measure)
+		.attr("class", "line")
+		.attr("d", line);
+	});
+}
+
+/**
+ * To change the day.
+ */
+function onPickerChanged() {
+	var selElem = document.getElementById("picker");
+	console.log(selElem.options[selElem.selectedIndex].value);
+	// Draw the graph os that day and clear the previous.
+	drawGraph(selElem.options[selElem.selectedIndex].value);
+}
+
+/**
+ * Add a day to the dropdown box.
+ */
+function addOption(elem, text, delta) {
+	var day = new Date();
+	day.setDate(day.getDate() - delta);
+	elem.options[elem.options.length] = new Option(text, day.toString());
+}
+
+/**
+ Page is loaded, time for action.
+ */
+function onBodyLoad() {
+	// Find the dropdown box.
+	var pickerElem = document.getElementById("picker");
+	// Add days for the complete week, I think this is enough.
+	addOption(pickerElem, "Vandaag", 0);
+	addOption(pickerElem, "Gisteren", 1);
+	addOption(pickerElem, "Eergisteren", 2);
+	for(var i = 3; i < 7; i++) {
+		addOption(pickerElem, "" + i + " dagen geleden", i);
+	}
+	// By default, show today.
+	drawGraph((new Date()).toString());
+}
+</script>
+</head>
+
+<body onload="onBodyLoad();">
+<select id="picker" onchange="onPickerChanged();"></select>
+<h1 id="header"></h1><br/>
+<svg width="960" height="500"></svg>
+</body>
